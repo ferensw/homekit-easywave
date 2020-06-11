@@ -1,0 +1,18 @@
+{
+	"covers": [
+		{
+		"name": "Window front",
+		"channel_id": "01",
+		"remote_id": "20d7e3",
+		"time_up": 23,
+		"time_down": 20.55
+		},
+		{
+		"name": "Window back",
+		"channel_id": "02",
+		"remote_id": "20d7e4",
+		"time_up": 23,
+		"time_down": 20.55
+		}
+	]
+}
