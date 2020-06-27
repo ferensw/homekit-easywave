@@ -54,6 +54,7 @@ class Cover(Accessory):
         super().__init__(*args, **kwargs)
         self._stop_command = asyncio.Event(loop=self.driver.loop)
         self._ready_to_send = asyncio.Lock(loop=self.driver.loop)
+        self._ready_to_handle = asyncio.Lock(loop=self.driver.loop)
 
         serv_cover = self.add_preload_service('WindowCovering')
         self.char_current_position = serv_cover.configure_char('CurrentPosition')
@@ -129,6 +130,49 @@ class Cover(Accessory):
         self.char_current_position.set_value(value)
         self._ready_to_send.release()
 
+    def receive_command(self, command):
+        if command == 'A':
+            value = 0
+        elif command == 'B':
+            value = 100
+        elif command == 'C':
+            self._stop_command.set()
+            value = None
+        else:
+            value = None
+        if isinstance(value, int):
+            self.driver.add_job(self.async_dispatch_command, value)
+
+
+    async def async_dispatch_command(self, value):
+        await self._ready_to_handle.acquire()
+        try:
+            self._stop_command.clear()
+            start_time = self.driver.loop.time()
+            self.char_target_position.set_value(value)
+            current_position = self.char_current_position.value
+            if value > current_position:
+                time_travel = (value - current_position) / 100 * self.time_down
+            else:
+                time_travel = (current_position - value) / 100 * self.time_up
+    
+            try:
+                await asyncio.wait_for(self._stop_command.wait(), time_travel, loop=self.driver.loop)
+                logging.debug('Stop command received')
+            except asyncio.TimeoutError:
+                self.char_current_position.set_value(value)
+                logging.debug('End reached')
+            else:
+                end_time = self.driver.loop.time()
+                travelled_time = end_time - start_time
+                if value > current_position:
+                    new_value = travelled_time / self.time_up * 100 + current_position
+                else:
+                    new_value = current_position - travelled_time / self.time_down * 100
+                self.char_target_position.set_value(int(new_value))
+                self.char_current_position.set_value(int(new_value))
+        finally:
+            self._ready_to_handle.release()
 
 class EasywaveBridge(Bridge):
     def __init__(self, driver, display_name, **kwargs):
@@ -179,48 +223,7 @@ class EasywaveBridge(Bridge):
         remote_id = event.get('id', None)
         command = event.get('command', None)
         accessory = self.get_accessory(remote_id)
-        if command == 'A':
-            value = 0
-        elif command == 'B':
-            value = 100
-        elif command == 'C':
-            self._stop_command.set()
-            value = None
-        else:
-            value = None
-        if isinstance(value, int):
-            self.driver.add_job(self.async_dispatch_command, accessory, value)
-
-
-    async def async_dispatch_command(self, accessory, value):
-        await self._ready_to_handle.acquire()
-        try:
-            self._stop_command.clear()
-            start_time = self.loop.time()
-            accessory.char_target_position.set_value(value)
-            current_position = accessory.char_current_position.value
-            if value > current_position:
-                time_travel = (value - current_position) / 100 * accessory.time_down
-            else:
-                time_travel = (current_position - value) / 100 * accessory.time_up
-    
-            try:
-                await asyncio.wait_for(self._stop_command.wait(), time_travel, loop=self.loop)
-                logging.debug('Stop command received')
-            except asyncio.TimeoutError:
-                accessory.char_current_position.set_value(value)
-                logging.debug('End reached')
-            else:
-                end_time = self.loop.time()
-                travelled_time = end_time - start_time
-                if value > current_position:
-                    new_value = travelled_time / accessory.time_up * 100 + current_position
-                else:
-                    new_value = current_position - travelled_time / accessory.time_down * 100
-                accessory.char_target_position.set_value(int(new_value))
-                accessory.char_current_position.set_value(int(new_value))
-        finally:
-            self._ready_to_handle.release()
+        accessory.receive_command(command)
 
 
 def get_bridge(driver):
