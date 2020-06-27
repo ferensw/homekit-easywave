@@ -51,7 +51,7 @@ class ProtocolBase(asyncio.Protocol):
         """Ignore repetitive commands from remote"""
         rec_time = time.time()
         rec_data = data
-        if rec_data != self.old_data or rec_time - self.old_time > 1:
+        if rec_data != self.old_data or rec_time - self.old_time > 1 or data == b'OK\r':
             try:
                 data = data.decode()
             except UnicodeDecodeError:
