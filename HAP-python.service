@@ -1,0 +1,10 @@
+[Unit]
+Description = HAP-python daemon
+After = local-fs.target network.target
+
+[Service]
+User = pi
+ExecStart = /usr/bin/python3 /home/pi/homekit-easywave/homekit_easywave.py
+
+[Install]
+WantedBy = multi-user.target
