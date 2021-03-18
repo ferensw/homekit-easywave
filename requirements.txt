@@ -1,0 +1,3 @@
+HAP-python[QRCode]
+docopt
+pyserial_asyncio
